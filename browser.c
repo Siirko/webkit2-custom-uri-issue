@@ -1,51 +1,72 @@
 #include <gtk/gtk.h>
 #include <webkit2/webkit2.h>
 
-static void destroy_win_cb(GtkWidget* widget, GtkWidget* window)
-{
-    gtk_main_quit();
-}
+static void destroy_win_cb(GtkWidget *widget, GtkWidget *window) { gtk_main_quit(); }
 
-static gboolean close_web_cb(WebKitWebView* webView, GtkWidget* window)
+static gboolean close_web_cb(WebKitWebView *webView, GtkWidget *window)
 {
     gtk_widget_destroy(window);
     return TRUE;
 }
 
-static void uri_scheme_request_cb (WebKitURISchemeRequest *request, gpointer user_data)
+static void uri_scheme_request_cb(WebKitURISchemeRequest *request, gpointer user_data)
 {
-    // TODO Better video file
-    char path[256] = "/home/wusyong/gtkbrowser/test.webm";
+    char *scheme = (char *)webkit_uri_scheme_request_get_scheme(request);
+    puts(scheme);
+    char *path = (char *)user_data;
     GFile *file;
     GFileInputStream *stream;
     GError *err = NULL;
-    gsize stream_length = 2165175;
+    gsize stream_length;
 
-    file = g_file_new_for_path (path);
-    stream = g_file_read (file, NULL, &err);
+    file = g_file_new_for_path(path);
+    stream = g_file_read(file, NULL, &err);
 
-    if (err != NULL)
+    if (err == NULL)
     {
-        g_error ("Could not open %s for reading: %s\n", path, err->message);
-        g_error_free (err);
-    }
+        GFileInfo *file_info = g_file_query_info(file, G_FILE_ATTRIBUTE_STANDARD_SIZE, 0, NULL, &err);
+        if (file_info != NULL)
+        {
+            stream_length = g_file_info_get_size(file_info);
+            g_object_unref(file_info);
+        }
+        else
+        {
+            g_error("Could not get file info: %s\n", err->message);
+            g_error_free(err);
+            return;
+        }
 
-    webkit_uri_scheme_request_finish (request, G_INPUT_STREAM(stream), stream_length, "video/webm");
-    g_object_unref (stream);
+        webkit_uri_scheme_request_finish(request, G_INPUT_STREAM(stream), stream_length, "audio/mp3");
+        g_object_unref(stream);
+    }
+    else
+    {
+        g_error("Could not open %s for reading: %s\n", path, err->message);
+        g_error_free(err);
+    }
 }
 
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
-    gtk_init(&argc, &argv);
-    gchar *url = "gtk://test_video.mp4";
+    char *audio_path = NULL;
+    if (argc < 2)
+    {
+        printf("Usage: %s <audio file>\n", argv[0]);
+        return 1;
+    }
+    audio_path = argv[1];
 
+    gtk_init(&argc, &argv);
+    gchar *url = "custom://test.mp3"; // Change the URL to reflect audio
     WebKitWebContext *ctx;
     ctx = webkit_web_context_new();
-    webkit_web_context_register_uri_scheme(ctx, "gtk", (WebKitURISchemeRequestCallback)uri_scheme_request_cb, NULL, NULL);
+    webkit_web_context_register_uri_scheme(ctx, "custom", (WebKitURISchemeRequestCallback)uri_scheme_request_cb,
+                                           audio_path, NULL);
 
     GtkWidget *win;
     WebKitWebView *web;
-    WebKitSettings *settings; 
+    WebKitSettings *settings;
 
     win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_default_size(GTK_WINDOW(win), 1200, 800);
